@@ -1,0 +1,9 @@
+sqlalchemy
+flask
+flask-sqlalchemy
+flask-wtf
+wtforms
+bleach
+email-validator
+flask-limiter
+flask-login
