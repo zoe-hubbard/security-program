@@ -1,20 +1,24 @@
-from flask import Flask
+from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
+from flask_talisman import Talisman
+from app.utils import sanitize_html
 from config import Config
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-#from flask_bcrypt import Bcrypt
+from flask_bcrypt import Bcrypt, check_password_hash
 from flask_login import LoginManager
 from config import Config
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 
+
+
 db = SQLAlchemy() # initialises
 csrf = CSRFProtect()
-#bcrypt = Bcrypt()
+bcrypt = Bcrypt()
 login_manager = LoginManager()
 limiter = Limiter(key_func=get_remote_address, default_limits=["7 per minute"]) # limit set for per ip address per minute
 
@@ -24,9 +28,36 @@ def create_app():
 
     csrf.init_app(app)  # initialises crsf protection
     db.init_app(app)
-    #bcrypt.init_app(app)  # initialises bcyypt
+    bcrypt.init_app(app)  # initialises bcyypt
     login_manager.init_app(app)
     limiter.init_app(app)
+
+    csp = {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", "https://cdn.jsdelivr.net"],  # allow SweetAlert, app.js from static is 'self'
+        'style-src': ["'self'", "https://cdn.jsdelivr.net"],
+        'img-src': ["'self'", "data:"],
+        'connect-src': ["'self'"]
+    }
+
+    Talisman(app, content_security_policy=csp, force_https=True,
+             strict_transport_security=True, strict_transport_security_max_age=31536000)
+
+    @app.errorhandler(400)
+    def bad_request(e):
+        return render_template('error.html', code=400, message="Bad Request"), 400
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template('error.html', code=403, message="Access Denied"), 403
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template('error.html', code=404, message="Not Found"), 404
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        return render_template('error.html', code=500, message="Internal Server Error"), 500
 
     from app.models import User
     @login_manager.user_loader
@@ -39,7 +70,7 @@ def create_app():
         os.mkdir('logs')  # creates log file
     log_file = os.path.join('logs', 'login.log')  # joins log file
 
-    handler = RotatingFileHandler(log_file, maxBytes=1000000, backupCount=3)  # handler for log
+    handler = RotatingFileHandler(log_file, maxBytes=1000000, backupCount=5)  # handler for log
     formatter = logging.Formatter(
         fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # creates format for log
         datefmt='%d/%m/%Y %H:%M:%S')
@@ -65,7 +96,10 @@ def create_app():
         ]
 
         for user in users:
-            user = User(username=user["username"], password=user["password"], role=user["role"], bio=user["bio"])
+            PEPPER = os.environ.get('PASSWORD_PEPPER', '')
+            user = User(username=user["username"], role=user["role"],
+                        bio= sanitize_html(user["bio"]))
+            User.set_password(user["password"],)
             db.session.add(user)
             db.session.commit()
 
