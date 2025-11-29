@@ -3,17 +3,14 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
 from flask_talisman import Talisman
 from app.utils import sanitize_html
-from config import Config
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask_bcrypt import Bcrypt, check_password_hash
+from flask_bcrypt import Bcrypt
 from flask_login import LoginManager
 from config import Config
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-
-
 
 
 db = SQLAlchemy() # initialises
@@ -26,11 +23,11 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    csrf.init_app(app)  # initialises crsf protection
+    csrf.init_app(app)  # initialises csrf protection
     db.init_app(app)
     bcrypt.init_app(app)  # initialises bcyypt
     login_manager.init_app(app)
-    limiter.init_app(app)
+    limiter.init_app(app) # initialises limit
 
     csp = {
         'default-src': ["'self'"],
@@ -43,7 +40,7 @@ def create_app():
     Talisman(app, content_security_policy=csp, force_https=True,
              strict_transport_security=True, strict_transport_security_max_age=31536000)
 
-    @app.errorhandler(400)
+    @app.errorhandler(400) # error mpage for a
     def bad_request(e):
         return render_template('error.html', code=400, message="Bad Request"), 400
 
@@ -95,12 +92,16 @@ def create_app():
             {"username": "admin1@email.com", "password": "Adminpass!23", "role": "admin", "bio": "I'm an administrator"}
         ]
 
-        for user in users:
+        for u in users:
             PEPPER = os.environ.get('PASSWORD_PEPPER', '')
-            user = User(username=user["username"], role=user["role"],
-                        bio= sanitize_html(user["bio"]))
-            User.set_password(user["password"],)
-            db.session.add(user)
+            new_user = User(
+                username=u["username"],
+                password=u["password"],
+                role=u["role"],
+                bio=sanitize_html(u["bio"])
+            )
+
+            db.session.add(new_user)
             db.session.commit()
 
     return app

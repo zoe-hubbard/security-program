@@ -73,6 +73,7 @@ class RegisterForm(FlaskForm):
     submit = SubmitField("Register")
 
 class CheckPassword(FlaskForm):
+    current_password = PasswordField('Current Password', validators=[DataRequired()])
     new_password = PasswordField("new password", validators=[  # psswd
         DataRequired(message='password is required'),
         password_validator ])

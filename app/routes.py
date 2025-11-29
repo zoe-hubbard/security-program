@@ -1,11 +1,10 @@
 import traceback
 from flask import request, render_template, redirect, url_for, session, Blueprint, flash, abort, current_app
-from flask_login import login_user, fresh_login_required, logout_user, login_required
+from flask_login import login_user, logout_user, login_required
 from app import db
 from app.models import User
 from app.utils import sanitize_html
 from app.loginform import LoginForm, RegisterForm, CheckPassword
-from app import loginform
 from flask_bcrypt import bcrypt, Bcrypt, check_password_hash, generate_password_hash
 from flask_login import fresh_login_required, current_user
 from app.utils import requires_roles, encrypt_text, decrypt_text
@@ -17,13 +16,18 @@ main = Blueprint('main', __name__)
 @login_required
 @requires_roles('admin')
 def admin_dashboard():
-    return render_template('admin/dashboard.html')
+    return render_template('admin.html')
 
 @main.route('/moderator')
 @login_required
 @requires_roles('moderator')
 def moderator_dashboard():
-    return render_template('moderator/dashboard.html')
+    return render_template('moderator.html')
+
+@main.route('/user')
+@login_required
+def user_dashboard():
+    return render_template('user_dashboard.html')
 
 @main.route('/')
 def home():
@@ -32,8 +36,6 @@ def home():
 @main.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
-
-
     if form.validate_on_submit():
         raw_username = form.username.data  # gets raw username
         username = sanitize_html(raw_username)  # sanitizes using utils.py
@@ -42,7 +44,7 @@ def login():
         client_ip = request.remote_addr or "Unknown IP"  # gets client ip
 
         if user and check_password_hash(user.password_hash, password):
-            session.clear()
+            #session.clear()
             login_user(user, remember=False, fresh=True)
             current_app.logger.info("user logged in", extra={'ip': client_ip})
             return redirect(url_for('main.dashboard'))
@@ -62,15 +64,16 @@ def login():
                     f"error='{error}' | ip={client_ip} | user='{form.username.data}'"
                     # logs errors w appropriate fields
                 )
-    return render_template('login.html', form=form,)
+    return render_template('login.html', form=form)
 
 @main.route('/dashboard')
+@login_required
 def dashboard():
-    if 'user' in session:
-        username = session['user']
-        bio = decrypt_text(session['bio'])
-        return render_template('dashboard.html', username=username, bio=bio)
-    return redirect(url_for('main.login'))
+
+    username = current_user.username
+    bio = decrypt_text(current_user.bio)  if current_user.bio else ""
+    return render_template('dashboard.html', username=username, bio=bio)
+
 
 @main.route('/register', methods=['GET', 'POST'])
 def register():
@@ -78,17 +81,17 @@ def register():
     if request.method == 'POST':
         if form.validate_on_submit():
             raw_username = form.username.data  # gets raw username
-            username = sanitize_html(raw_username)# sanitizes using utils.py
+            username = sanitize_html(raw_username) # sanitizes using utils.py
 
             password = form.password.data  # gets raw password
             hashed_pw = generate_password_hash(password)
 
-            raw_bio = form.bio.data
-            bio = encrypt_text((raw_bio))
+            raw_bio = form.bio.data or ""
+            bio = encrypt_text(raw_bio)
 
             client_ip = request.remote_addr or "Unknown IP"  # gets client ip
             role = 'user'
-            user = User(username=username, password=password, role=role, bio=bio)
+            user = User(username=username, password=hashed_pw, role=role, bio=bio)
 
             try:
                 db.session.add(user)
@@ -104,25 +107,17 @@ def register():
 
 @main.route('/admin-panel')
 def admin():
-    if session.get('role') != 'admin':
+    if current_user.role != 'admin':
         stack = ''.join(traceback.format_stack(limit=25))
         abort(403, description=f"Access denied.\n\n--- STACK (demo) ---\n{stack}")
     return render_template('admin.html')
 
 @main.route('/moderator')
 def moderator():
-    if session.get('role') != 'moderator':
+    if current_user.role != 'moderator':
         stack = ''.join(traceback.format_stack(limit=25))
         abort(403, description=f"Access denied.\n\n--- STACK (demo) ---\n{stack}")
     return render_template('moderator.html')
-
-@main.route('/user-dashboard')
-def user_dashboard():
-    if session.get('role') != 'user':
-        stack = ''.join(traceback.format_stack(limit=25))
-        abort(403, description=f"Access denied.\n\n--- STACK (demo) ---\n{stack}")
-    return render_template('user_dashboard.html', username=session.get('user'))
-
 
 @main.route('/change-password', methods=['GET', 'POST'])
 @fresh_login_required
@@ -146,7 +141,14 @@ def change_password():
         logout_user()  # force re-login to create a fresh session
         session.clear()
         flash("Password changed. Please log in again.", "success")
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('main.login'))
 
     return render_template('change_password.html', form=form)
 
+@main.route('/logout')
+@login_required
+def logout():
+    logout_user()       # clears the Flask-Login session
+    session.clear()     # clear any custom session data
+    flash("You have been logged out.", "success")
+    return redirect(url_for('main.login'))

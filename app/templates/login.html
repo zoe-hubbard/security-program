@@ -17,7 +17,7 @@
 {% endwith %}
 
 <form method="POST" novalidate>
-        {{ form.hidden_tag() }}  <!-- csrf token -->
+    {{ form.hidden_tag() }}  <!-- csrf token -->
   Username: {{ form.username() }}<br>
     {% for error in form.username.errors %}
             <pre style="color: red;">{{ error }}</pre><br> <!-- iterates --> <!-- show errors-->

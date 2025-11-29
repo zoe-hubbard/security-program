@@ -47,4 +47,10 @@ def encrypt_text(plaintext):
     return get_fernet().encrypt(plaintext.encode()).decode()
 
 def decrypt_text(token):
-    return get_fernet().decrypt(token.encode()).decode()
+    if not token:
+        return ""
+    try:
+        return get_fernet().decrypt(token.encode()).decode()
+    except Exception:
+        # Either token is invalid or not encrypted yet
+        return token  # fallback: return raw value
